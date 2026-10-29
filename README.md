@@ -364,6 +364,11 @@ you> Compare TEST-LAPTOP-01 and Ghost
 
 you> I want something under 50000 DZD
 [needs_clarification] Which kind of product are you looking for (for example a laptop or a TV)?
+
+you> Explain the difference between OLED and QLED using only the knowledge stored in the project. What is the role of the backlight in QLED, and why can OLED display true black?
+
+[ok] QLED and OLED are both advanced display technologies used in televisions, but they operate differently. OLED uses a panel where each pixel produces its own light, allowing for true black and high contrast. On the other hand, QLED is an LCD television with a quantum dot layer, utilizing a separate LED backlight. This means the entire screen is lit from behind, enabling high brightness but not allowing individual pixels to be completely turned off. OLED can display true black because each pixel can independently turn off, creating deep blacks and sharp contrasts.
+  source: sample_oled_vs_qled
 ```
 
 ---
@@ -529,3 +534,4 @@ Example: adding `PROMOTION_SEARCH`.
 5. Add `ConversationManager` for follow-up questions and language continuity.
 6. Add FastAPI and `to_dict()` or equivalent response serialization for the website.
 7. Improve `find_by_name` with typo tolerance and include availability in comparisons.
+
