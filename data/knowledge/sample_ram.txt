@@ -1,0 +1,3 @@
+RAM is the short-term working memory of a computer. Programs and open files are kept in RAM while they are in use, because RAM is much faster than storage.
+
+Having more RAM lets a computer keep more programs and data ready at once. When RAM is full, the system has to use slower storage as extra memory, and the computer feels slower.

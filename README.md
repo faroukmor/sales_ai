@@ -1,319 +1,531 @@
 # Sales AI
-**G Sales AI** is a proposed AI-powered sales assistant for the
-G website. It aims to help customers discover products, understand
-specifications, compare alternatives, receive recommendations, and find
-valid promotions.
 
-> **Project status:** Initial design and planning. The architecture and
-> features described below are proposed; they should not be considered
-> implemented until the relevant code and tests exist.
+An AI-powered sales assistant for an e-commerce website. The system combines three capabilities with separate responsibilities:
 
-## Goals
+| Capability | Implemented through | Purpose |
+|---|---|---|
+| **Structured search** | SQLite + `ProductRepository` | Exact filtering by price, category, brand, and specifications |
+| **Knowledge retrieval (RAG)** | Ollama embeddings + NumPy | Find relevant passages for knowledge and explanation questions |
+| **Answer generation** | Local LLM through Ollama | Explain retrieved passages in simple language |
 
-The planned assistant will support:
+> **Core rule:** The language model is **not the source of truth**. Prices, availability, specifications, and promotion dates must come from the database. The model is used to formulate explanations, not to invent commercial facts.
 
--   **Intelligent product search:** Find products using category, brand,
-    price, specifications, and other constraints.
--   **Product explanations:** Explain technical terms and product
-    features using relevant, trustworthy information.
--   **Product comparison:** Compare products using recorded
-    specifications and prices.
--   **Personalized recommendations:** Rank products according to a
-    customer's stated needs.
--   **Promotions and offers:** Show promotions only when their validity,
-    terms, and dates can be verified.
--   **Multilingual conversations:** Support English, French, Arabic, and
-    Algerian Darija where feasible.
--   **Website integration:** Return structured responses that the
-    website can display as text, product cards, and links.
+> **Important:** All products and promotions in this project are **mock test data** (`is_test_data = 1`). The project contains no real Géant products, prices, or offers.
 
-## Core Design Principles
-
-1.  **Separate responsibilities.** Each component should have a clear
-    purpose and a small interface.
-2.  **Use structured data for exact facts.** Prices, stock status,
-    specifications, and promotion dates must come from trusted data
-    sources, not from an LLM's memory.
-3.  **Use RAG for knowledge-based answers.** Retrieve relevant evidence
-    before asking the language model to explain it.
-4.  **Do not call the LLM unnecessarily.** Exact filtering and simple
-    product lookups should use deterministic application logic.
-5.  **Build incrementally.** Implement and test a small prototype before
-    adding every planned feature.
-6.  **Avoid unnecessary complexity.** Add a class, library, or service
-    only when it solves a real problem.
-
-## Proposed Request Flow
-
-``` mermaid
-flowchart TD
-    A["User Question"] --> B["ChatService"]
-    B --> C["QueryAnalyzer"]
-    C --> D["QueryPlan"]
-    D --> E{"Intent clear and information sufficient?"}
-
-    E -- "No" --> F["Ask a clarifying question"]
-    F --> R["ResponseBuilder"]
-
-    E -- "Yes" --> G["Intent Router"]
-    G -- "Product Search" --> H["ProductRepository"]
-    G -- "Explanation" --> I["KnowledgeRetriever"]
-    G -- "Comparison" --> J["ProductRepository and ProductComparator"]
-    G -- "Recommendation" --> K["NeedsAnalyzer and ProductRanker"]
-    G -- "Promotion Search" --> L["PromotionRepository"]
-
-    H --> M["EvidenceBundle"]
-    I --> M
-    J --> M
-    K --> M
-    L --> M
-
-    M --> N{"Evidence sufficient?"}
-    N -- "No" --> O["Safe fallback or clarification"]
-    O --> R
-    N -- "Yes" --> P{"Natural-language generation needed?"}
-    P -- "No" --> R
-    P -- "Yes" --> Q["AnswerGenerator"]
-    Q --> S["AnswerValidator"]
-    S --> R
-
-    R --> T["ChatResponse"]
-    T --> U["Website API"]
-    U --> V["Website Interface"]
-```
-
-The router, recommendation components, promotion handling, and API may
-be introduced in later stages. The first prototype should contain only
-the components required for its initial use cases.
-
-## Proposed Components
-
-  -----------------------------------------------------------------------
-  Component                           Main responsibility
-  ----------------------------------- -----------------------------------
-  `ChatService`                       Coordinates the request lifecycle
-                                      and calls the appropriate
-                                      components.
-
-  `QueryAnalyzer`                     Identifies the likely intent,
-                                      language, entities, and constraints
-                                      in the user's message.
-
-  `QueryPlan`                         Holds the analyzed request in a
-                                      structured form.
-
-  `ProductRepository`                 Reads and searches structured
-                                      product data.
-
-  `KnowledgeRetriever`                Retrieves relevant knowledge chunks
-                                      and their source metadata.
-
-  `EmbeddingService`                  Generates embeddings when this
-                                      responsibility needs to be shared
-                                      or isolated.
-
-  `AnswerGenerator`                   Uses Ollama to produce an answer
-                                      based on supplied evidence.
-
-  `EvidenceBundle`                    Groups retrieved products,
-                                      knowledge chunks, and source
-                                      references for a request.
-
-  `AnswerValidator`                   Checks whether important answer
-                                      claims are supported by available
-                                      evidence.
-
-  `ProductComparator`                 Compares recorded product
-                                      attributes and highlights missing
-                                      information.
-
-  `NeedsAnalyzer`                     Extracts customer priorities for
-                                      recommendations.
-
-  `ProductRanker`                     Ranks eligible products according
-                                      to explicit criteria.
-
-  `PromotionRepository`               Retrieves promotions and checks
-                                      their stored conditions and
-                                      validity dates.
-
-  `ResponseBuilder`                   Builds a consistent response for
-                                      success, clarification, missing
-                                      evidence, and errors.
-
-  `ChatResponse`                      Represents the structured result
-                                      returned to the caller.
-
-  `ConversationManager`               Optionally manages relevant
-                                      conversation history in a later
-                                      phase.
-  -----------------------------------------------------------------------
-
-These are design candidates, not a requirement to create every class
-immediately. In particular, a small prototype may keep routing inside
-`ChatService` until a separate router provides a clear benefit.
-
-## Example Request Paths
-
-### 1. Product Search
-
-User: *"Find a laptop under 100,000 DZD with at least 16 GB RAM."*
-
-1.  `QueryAnalyzer` identifies a product-search request and extracts the
-    constraints.
-2.  `QueryPlan` stores the intent and filters.
-3.  `ProductRepository` queries the product catalog.
-4.  The application verifies that returned products satisfy the price
-    and RAM conditions.
-5.  `ResponseBuilder` creates a structured response with the matching
-    products.
-
-### 2. Knowledge Question
-
-User: *"What is the difference between OLED and QLED?"*
-
-1.  `QueryAnalyzer` identifies an explanation request.
-2.  `KnowledgeRetriever` retrieves relevant passages from the knowledge
-    base.
-3.  The application checks whether the retrieved evidence is sufficient.
-4.  `AnswerGenerator` uses Ollama to explain the evidence in the user's
-    language.
-5.  The response includes source information where available.
-
-### 3. Product Comparison
-
-User: *"Compare Product A and Product B."*
-
-1.  Retrieve both products from the catalog.
-2.  Compare their recorded attributes using `ProductComparator`.
-3.  Mark unavailable attributes as unknown instead of guessing.
-4.  Use the LLM only if a natural-language explanation is useful.
-5.  Return the comparison and the relevant product records.
-
-## Proposed Project Structure
-
-``` text
-sales_ai/
-├── core/
-│   └── config.py
-├── models/
-│   ├── query_plan.py
-│   ├── evidence_bundle.py
-│   └── chat_response.py
-├── services/
-│   ├── chat_service.py
-│   ├── query_analyzer.py
-│   ├── answer_generator.py
-│   └── response_builder.py
-├── repositories/
-│   ├── product_repository.py
-│   └── promotion_repository.py       # Later phase
-├── rag/
-│   ├── knowledge_retriever.py
-│   └── embedding_service.py
-├── tests/
-│   ├── test_query_analyzer.py
-│   ├── test_product_repository.py
-│   ├── test_knowledge_retriever.py
-│   └── test_chat_service.py
-├── main.py
-└── requirements.txt
-```
-
-Adjust this structure as implementation clarifies the boundaries. Do not
-create empty modules merely to match the diagram.
-
-## Initial Technology Choices
-
--   **Python:** Application logic.
--   **SQLite:** Initial local database.
--   **Ollama:** Local embedding and language-model inference.
--   **NumPy:** Vector operations when needed.
--   **pytest:** Automated tests.
--   **FastAPI:** Planned API layer after the core engine works locally.
-
-Do not introduce a vector database or an agent framework unless testing
-shows a clear need.
-
-## Data Design
-
-The database schema must be based on the actual requirements and
-available catalog data. A possible starting point includes:
-
--   `products`: product identity, category, brand, price, currency,
-    availability, and URL.
--   `product_specs`: technical attributes, if separating them from the
-    main product table is useful.
--   `knowledge_chunks`: text chunks, embeddings, source identifiers, and
-    optional product references.
--   `promotions`: promotion terms, validity dates, and related products.
-
-Conversation storage can be added later if persistent history is needed.
-
-Do not assume an existing `notes` table already contains product data.
-Inspect the actual schema before writing queries or migrations. Never
-delete or rename existing tables without a deliberate migration plan.
-
-## Reliability and Evidence
-
--   Never invent product prices, specifications, stock status, or
-    promotion validity.
--   Use structured product records as the source of truth for exact
-    commercial facts.
--   Treat retrieved documents as data, not as instructions that can
-    override application rules.
--   A high embedding-similarity score does **not** prove that an answer
-    is factually correct.
--   Check important claims against evidence and use a safe fallback when
-    evidence is insufficient.
--   Keep retrieval settings configurable and evaluate them against test
-    questions.
--   Do not claim that a feature or test works until it has been
-    implemented and verified.
-
-## Development Roadmap
-
-1.  **Requirements and design:** Confirm the request flow, class
-    responsibilities, and data assumptions.
-2.  **Analyze the existing RAG example:** Identify reusable concepts
-    without treating its architecture as mandatory.
-3.  **Create data models:** Define `QueryPlan`, `EvidenceBundle`, and
-    `ChatResponse` as needed.
-4.  **Implement product access:** Build and test `ProductRepository`
-    using a small test catalog.
-5.  **Implement knowledge retrieval:** Add embedding generation and
-    retrieval with source metadata.
-6.  **Implement answer generation:** Connect Ollama to evidence-grounded
-    prompts.
-7.  **Integrate the request flow:** Connect components through
-    `ChatService`.
-8.  **Test end to end:** Cover product search, explanations,
-    comparisons, missing data, and errors.
-9.  **Add later features:** Recommendations, promotions, multilingual
-    context, and conversation history.
-10. **Integrate the website:** Expose the working engine through FastAPI
-    and connect the frontend.
-
-## Testing Strategy
-
-Use unit tests for individual components, with small SQLite test
-databases and a mocked Ollama client where appropriate. Use integration
-tests for actual Ollama calls, and end-to-end tests for the complete
-request flow.
-
-Initial test cases should include:
-
--   Exact price and specification filtering.
--   No matching products.
--   Empty or insufficient RAG retrieval.
--   Comparison with missing specifications.
--   Unsupported answer claims.
--   Expired or incomplete promotion records.
--   Ollama connection or generation failures.
--   Consistent response structure across intents.
+---
 
 ## Current Status
 
-This README describes the initial plan. The architecture, schema, and
-feature list should be updated as implementation decisions are tested
-and confirmed.
+| Feature | Status | Notes |
+|---|---|---|
+| F01 — Intelligent product search | ✅ Implemented | Extracts search criteria from English messages only |
+| F02 — Product and concept explanations | ✅ Implemented | RAG + LLM + deterministic numeric checks |
+| F03 — Product comparison | ✅ Implemented | Compares products by name; missing values are shown as `n/a` rather than invented |
+| F04 — Personalized recommendations | ⏳ Not implemented | The intent is detected, but the response is `not_supported` |
+| F05 — Offers and promotions | ◐ Partial | `PromotionRepository` and validity rules are ready, but no handler exists yet |
+| F06 — Multilingual conversations | ◐ Partial | Fixed responses in Arabic, French, and English; question understanding is English-only; Algerian Darija is not supported |
+| F07 — Website integration | ◐ Partial | Structured `ChatResponse` is ready; the FastAPI layer has not been built |
+
+### What Has and Has Not Been Verified
+
+- ✅ **160 unit and integration-component tests using fakes** pass without Ollama.
+- ✅ The complete request lifecycle (`ChatService`) is tested with fake generator and retriever components, including error paths.
+- ✅ `main.py` runs without Ollama: product search, comparison, and clarification work.
+- ⚠️ **The project has not been tested against a real Ollama server.** The `embed` and `chat` calls are implemented against the `ollama` library but have only been tested with fake clients.
+- ⚠️ `MIN_SIMILARITY` has not been tuned; `0.5` is an initial guess. The actual quality of generated answers has not been evaluated.
+- ⚠️ The project has been tested with Python 3.12.
+
+---
+
+## Architecture
+
+### Request Lifecycle
+
+```mermaid
+flowchart TD
+    U(["User question"]) --> CS["ChatService<br/>handle_message"]
+    CS --> QA["QueryAnalyzer<br/>analyze"]
+    QA --> QP[/"QueryPlan"/]
+    QP --> G1{"Is the intent UNKNOWN<br/>or is information missing?"}
+    G1 -->|Yes| RB["ResponseBuilder<br/>build / needs_clarification / error"]
+    G1 -->|No| RT{"Question intent"}
+
+    RT -->|PRODUCT_SEARCH| SH["SearchHandler"]
+    SH --> PRS["ProductRepository<br/>search"]
+
+    RT -->|COMPARISON| CH["ComparisonHandler"]
+    CH --> PRF["ProductRepository<br/>find_by_name"]
+    PRF --> CMP["ProductComparator<br/>compare"]
+
+    RT -->|EXPLANATION| EH["ExplanationHandler"]
+    EH --> KR["KnowledgeRetriever<br/>retrieve"]
+    KR --> ES["EmbeddingService<br/>embed"]
+    ES -.-> OL[("Ollama")]
+
+    RT -->|"PROMOTION_SEARCH / RECOMMENDATION"| NS["No handler yet<br/>NOT_SUPPORTED"]
+    NS --> RB
+
+    PRS --> EB[/"EvidenceBundle"/]
+    CMP --> EB
+    KR --> EB
+    EB --> G2{"Is generation needed<br/>and is evidence available?"}
+    G2 -->|No| RB
+    G2 -->|Yes| AG["AnswerGenerator<br/>generate"]
+    AG -.-> OL
+    AG --> D1{"Did the model return<br/>NO_ANSWER?"}
+    D1 -->|Yes: no text| RB
+    D1 -->|No| AV["AnswerValidator<br/>validate"]
+    AV --> D2{"Are all numbers<br/>present in the evidence?"}
+    D2 -->|Yes: accept text| RB
+    D2 -->|No: discard text| RB
+
+    ES -.->|EmbeddingError| ERR["ChatService<br/>catches GeantError"]
+    AG -.->|GenerationError| ERR
+    ERR --> RB
+
+    RB --> CR[/"ChatResponse<br/>answer, status, products,<br/>comparison, sources"/]
+    CR --> W(["Website UI / CLI"])
+
+    classDef later stroke-dasharray: 5 5
+    classDef external fill:#eeeeee,stroke:#999999
+    class NS later
+    class OL external
+```
+
+- Dashed arrows indicate a dependency on an external service (Ollama) or an error path.
+- The dashed `NOT_SUPPORTED` node represents an intent whose handler has not yet been implemented (Phase 6).
+- Every request path ends at `ResponseBuilder`, which produces a unified `ChatResponse`.
+
+### Components and Dependencies
+
+```mermaid
+classDiagram
+    direction LR
+    class ChatService {
+        +handle_message(message, session_id) ChatResponse
+    }
+    class QueryAnalyzer {
+        +analyze(message) QueryPlan
+    }
+    class Handler {
+        <<interface>>
+        +handle(plan) EvidenceBundle
+    }
+    class SearchHandler
+    class ComparisonHandler
+    class ExplanationHandler
+    class ProductRepository {
+        +search(filters, limit) list~Product~
+        +get_by_id(product_id) Product
+        +find_by_name(ref) list~Product~
+        +list_brands() list~str~
+    }
+    class PromotionRepository {
+        +find_valid(category) list~Promotion~
+    }
+    class KnowledgeRetriever {
+        +retrieve(query) list~ScoredChunk~
+    }
+    class KnowledgeIngestor {
+        +add_document(source, text) int
+        +add_directory(folder) dict
+    }
+    class EmbeddingService {
+        +embed(text) ndarray
+    }
+    class ProductComparator {
+        +compare(products) ComparisonResult
+    }
+    class AnswerGenerator {
+        +generate(question, chunks, language) str
+    }
+    class AnswerValidator {
+        +validate(answer, evidence_texts) ValidationResult
+    }
+    class ResponseBuilder {
+        +build(plan, bundle, generated_text) ChatResponse
+        +needs_clarification(plan) ChatResponse
+        +error(plan) ChatResponse
+        +unsupported(plan) ChatResponse
+    }
+
+    ChatService --> QueryAnalyzer
+    ChatService --> Handler
+    ChatService --> AnswerGenerator
+    ChatService --> AnswerValidator
+    ChatService --> ResponseBuilder
+    Handler <|.. SearchHandler
+    Handler <|.. ComparisonHandler
+    Handler <|.. ExplanationHandler
+    SearchHandler --> ProductRepository
+    ComparisonHandler --> ProductRepository
+    ComparisonHandler --> ProductComparator
+    ExplanationHandler --> KnowledgeRetriever
+    KnowledgeRetriever --> EmbeddingService
+    KnowledgeIngestor --> EmbeddingService
+    note for PromotionRepository "Ready and tested, but no handler yet (Phase 6)"
+```
+
+### Database Model
+
+```mermaid
+erDiagram
+    products ||--o{ product_specs : "has specs"
+    products |o--o{ promotions : "may target"
+    products |o--o{ knowledge_chunks : "may relate to"
+
+    products {
+        INTEGER id PK
+        TEXT name
+        TEXT category
+        TEXT brand
+        REAL price "NULL = unknown"
+        TEXT currency
+        INTEGER in_stock "NULL = unknown"
+        TEXT url
+        INTEGER is_test_data
+    }
+    product_specs {
+        INTEGER id PK
+        INTEGER product_id FK
+        TEXT key "unique per product"
+        TEXT value_text
+        REAL value_num
+        TEXT unit
+    }
+    promotions {
+        INTEGER id PK
+        TEXT title
+        TEXT conditions
+        TEXT starts_at "ISO date or NULL"
+        TEXT ends_at "ISO date or NULL"
+        INTEGER product_id FK
+        TEXT category
+        TEXT source
+        INTEGER is_test_data
+    }
+    knowledge_chunks {
+        INTEGER id PK
+        TEXT source
+        TEXT title
+        TEXT text
+        INTEGER product_id FK
+        BLOB embedding "float32"
+        TEXT embedding_model
+    }
+```
+
+### Detailed Example: A Knowledge Question (RAG)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CS as ChatService
+    participant QA as QueryAnalyzer
+    participant EH as ExplanationHandler
+    participant KR as KnowledgeRetriever
+    participant ES as EmbeddingService
+    participant AG as AnswerGenerator
+    participant AV as AnswerValidator
+    participant RB as ResponseBuilder
+
+    User->>CS: What is the difference between OLED and QLED?
+    CS->>QA: analyze(message)
+    QA-->>CS: QueryPlan (intent=EXPLANATION, language=en)
+    CS->>EH: handle(plan)
+    EH->>KR: retrieve(message)
+    KR->>ES: embed(query)
+    ES-->>KR: vector (from Ollama)
+    KR-->>EH: top-k ScoredChunk (cosine ≥ MIN_SIMILARITY)
+    EH-->>CS: EvidenceBundle(chunks)
+
+    alt No chunks found
+        CS->>RB: build(plan, bundle, None)
+    else Chunks found
+        CS->>AG: generate(question, chunks, language)
+        AG-->>CS: text or None (NO_ANSWER)
+        CS->>AV: validate(text, chunk texts)
+        AV-->>CS: ok or unsupported_numbers
+        CS->>RB: build(plan, bundle, text or None)
+    end
+    RB-->>CS: ChatResponse
+    CS-->>User: answer + sources + status
+```
+
+### File and Component Responsibilities
+
+| Type | Example | Allowed responsibilities | Responsibilities it should not have |
+|---|---|---|---|
+| **Data model** | `QueryPlan`, `Product`, `EvidenceBundle`, `ChatResponse` | Carry data | Business logic or I/O |
+| **Repository** | `ProductRepository`, `PromotionRepository` | SQL and converting rows into objects | Generating text or embeddings |
+| **Retrieval component** | `KnowledgeRetriever`, `EmbeddingService` | Finding relevant chunks and calling Ollama for embeddings | Deciding whether a claim is true |
+| **Handler** | `SearchHandler`, `ComparisonHandler`, `ExplanationHandler` | Gathering evidence for one intent | Composing the final response |
+| **Service** | `ChatService`, `QueryAnalyzer`, `ResponseBuilder`, etc. | Coordinating a workflow or handling one specific application responsibility | Direct SQL scattered across the application |
+
+---
+
+## Project Structure
+
+```text
+geant_sales_ai/
+├── main.py                       # Composition root + command-line interface
+├── requirements.txt
+├── pytest.ini                    # pythonpath = . (allows pytest to find packages)
+├── core/
+│   ├── config.py                 # All settings (constants only)
+│   ├── exceptions.py             # GeantError, EmbeddingError, GenerationError
+│   └── formatting.py             # format_number
+├── models/                       # Data only (immutable dataclasses)
+│   ├── query_plan.py             # Intent, Comparison, SpecConstraint, ProductFilters, QueryPlan
+│   ├── product.py                # Spec, Product
+│   ├── chunk.py                  # Chunk, ScoredChunk
+│   ├── promotion.py              # Promotion
+│   ├── comparison.py             # ComparisonRow, ComparisonResult
+│   ├── evidence.py               # EvidenceBundle
+│   └── chat_response.py          # Status, Source, ChatResponse
+├── db/
+│   ├── schema.sql                # Database tables
+│   ├── database.py               # connect, init_schema
+│   └── seed_test_data.py         # Mock test data (+ add_product, add_promotion)
+├── repositories/
+│   ├── product_repository.py
+│   └── promotion_repository.py
+├── rag/
+│   ├── embedding_service.py      # The only component that calls Ollama for embeddings
+│   ├── knowledge_ingestor.py     # Write path: split documents and embed them
+│   └── knowledge_retriever.py    # Read path: similarity search (cosine)
+├── services/
+│   ├── query_analyzer.py         # Message -> QueryPlan (deterministic rules)
+│   ├── product_comparator.py     # Deterministic comparison
+│   ├── answer_generator.py       # Ollama chat
+│   ├── answer_validator.py       # Numeric checks
+│   ├── response_builder.py       # Message templates + ChatResponse construction
+│   └── chat_service.py           # Coordinates the request lifecycle
+├── handlers/
+│   ├── __init__.py               # Handler (Protocol)
+│   ├── search_handler.py
+│   ├── comparison_handler.py
+│   └── explanation_handler.py
+├── data/knowledge/               # Experimental knowledge documents (not official content)
+└── tests/                        # 13 files, 160 tests
+```
+
+---
+
+## Installation and Running
+
+Requirements: Python 3.10 or later (the project uses the `X | None` type syntax), and Ollama for the explanation path only.
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pytest -q                       # Expected: 160 passed
+python -m db.seed_test_data      # Creates data\geant.db with test data
+```
+
+**Linux / macOS:**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pytest -q
+python -m db.seed_test_data
+```
+
+> Run `python -m db.seed_test_data` (not `python db/seed_test_data.py`) so the project root is on the import path.
+
+### Explanation Path (Requires Ollama)
+
+```bash
+ollama pull nomic-embed-text
+ollama pull qwen2.5:3b
+python main.py --ingest         # Embeds .txt and .md files in data/knowledge
+python main.py                  # Starts the command-line chat; type exit to quit
+```
+
+Product search and comparison **do not require Ollama at all**.
+
+### Examples (Actual Output on Test Data)
+
+```text
+you> Find a laptop under 100,000 DZD with at least 16 GB RAM
+[ok] I found 1 matching product(s). Prices and availability come from the product catalogue.
+  - TEST-LAPTOP-01 | 95000 DZD | in stock
+
+you> Compare TEST-LAPTOP-01 and TEST-LAPTOP-02
+[ok] Comparison of TEST-LAPTOP-01 / TEST-LAPTOP-02. "n/a" means the value is not recorded in the catalogue.
+price: 95000 DZD | 60000 DZD
+ram_gb: 16 GB | 8 GB
+storage_gb: 512 GB | 256 GB
+
+you> Compare TEST-LAPTOP-01 and Ghost
+[product_not_found] I couldn't find these products in the catalogue: Ghost.
+
+you> I want something under 50000 DZD
+[needs_clarification] Which kind of product are you looking for (for example a laptop or a TV)?
+```
+
+---
+
+## Using `ChatService` Programmatically
+
+```python
+from db.database import connect
+from core.config import DB_PATH
+from main import build_chat_service
+
+conn = connect(DB_PATH)
+service = build_chat_service(conn)
+response = service.handle_message(
+    "Find a laptop under 100,000 DZD with at least 16 GB RAM"
+)
+
+print(response.status, response.answer)
+for product in response.products:
+    print(product.name, product.price, product.currency)
+```
+
+### `ChatResponse` Structure (for Website Integration)
+
+| Field | Type | Meaning |
+|---|---|---|
+| `answer` | `str` | Display text (a fixed template or checked generated text) |
+| `status` | `Status` | **The website should make display decisions based on this field, not on the answer text.** |
+| `intent` | `Intent` | Detected intent |
+| `language` | `str` | `en` / `fr` / `ar` / `unknown` |
+| `products` | `tuple[Product, ...]` | Data for product cards |
+| `comparison` | `ComparisonResult \| None` | Comparison table |
+| `sources` | `tuple[Source, ...]` | Sources for explanations |
+| `promotions` | `tuple[Promotion, ...]` | Reserved for promotion support |
+
+| Status | Meaning |
+|---|---|
+| `ok` | Success |
+| `no_results` | No products matched the search |
+| `product_not_found` | A product named in a comparison was not found |
+| `insufficient_evidence` | There is not enough evidence for an explanation, or the generated answer was rejected |
+| `needs_clarification` | Information is missing or ambiguous; ask a clarifying question |
+| `not_supported` | The intent is recognized but its handler has not been implemented |
+| `error` | An expected operational error occurred (for example, Ollama is unavailable) |
+
+> `to_dict()` and the FastAPI layer have not been implemented yet. At that point, decide between `dataclasses.asdict` and Pydantic models.
+
+---
+
+## Design Decisions
+
+- **`None` means “unknown,” not zero:** A product with no recorded price must not appear in a “below 100,000” result. Missing comparison values are shown as `n/a`, not invented.
+- **Not every question needs an LLM:** Search and comparison are deterministic. The model is called only for the explanation path, and only after evidence has been retrieved.
+- **Semantic similarity is not factual correctness:** `KnowledgeRetriever` indicates that a passage is relevant to the question; it does not prove the passage or an answer is true. `AnswerValidator` therefore checks that every number in a generated answer appears in the evidence. Otherwise, the answer is discarded and the response becomes `insufficient_evidence`. This is a useful guardrail, not proof of correctness.
+- **Use `NO_ANSWER` instead of searching for the phrase “not found”:** A language-independent sentinel avoids breaking when the question or response is in Arabic or French.
+- **Promotions use deliberately strict rules:** An offer is displayed only when both its start and end dates are known and the current date is within the inclusive validity interval. An offer without an end date is not treated as valid.
+- **User input must never be interpolated directly into SQL:** Values are passed as parameters (`?`), and operators come from a closed allowlist.
+- **Dependency injection instead of internal construction:** Each class receives its dependencies through its constructor instead of creating them itself. This allows tests to run without Ollama. `main.py` is the single composition root.
+- **Separate reads from writes:** `KnowledgeRetriever` and `ProductRepository` are read-only; `KnowledgeIngestor` handles ingestion and writes.
+- **Expected operational errors versus programming errors:** `ChatService` catches only `GeantError`. An Ollama outage becomes a controlled `error` response, while programming errors remain visible rather than being silently hidden. Product search continues to work when Ollama is unavailable.
+
+---
+
+## Configuration (`core/config.py`)
+
+| Constant | Default | Notes |
+|---|---|---|
+| `DB_PATH` | `data/geant.db` | |
+| `OLLAMA_HOST` | `http://localhost:11434` | |
+| `EMBED_MODEL` | `nomic-embed-text` | Changing this requires re-embedding the knowledge base with `--ingest` |
+| `LLM_MODEL` | `qwen2.5:3b` | |
+| `OLLAMA_TIMEOUT_SECONDS` | `60` | |
+| `TOP_K` | `4` | Maximum number of chunks passed to the model |
+| `MIN_SIMILARITY` | `0.5` | **Initial guess; must be tuned experimentally** |
+| `TEMPERATURE` / `NUM_PREDICT` | `0.2` / `400` | |
+| `MAX_PRODUCT_RESULTS` | `10` | |
+| `MAX_CHUNK_CHARS` | `800` | Maximum chunk length during ingestion |
+
+### Tuning `MIN_SIMILARITY`
+
+If reasonable questions are rejected as `insufficient_evidence`, or irrelevant passages are accepted, inspect the actual retrieval scores for representative questions:
+
+```python
+from core.config import DB_PATH
+from db.database import connect
+from rag.embedding_service import EmbeddingService
+from rag.knowledge_retriever import KnowledgeRetriever
+
+retriever = KnowledgeRetriever(
+    connect(DB_PATH),
+    EmbeddingService(),
+    min_similarity=-1.0
+)
+for scored in retriever.retrieve("your question here"):
+    print(round(scored.score, 3), scored.chunk.title, "|", scored.chunk.text[:60])
+```
+
+---
+
+## Tests
+
+```bash
+pytest -q                       # Run all tests
+pytest tests/test_chat_service.py -v
+```
+
+| File | Count | Coverage |
+|---|---:|---|
+| `test_query_analyzer.py` | 30 | Intent, prices, specifications, ambiguity, language |
+| `test_product_repository.py` | 29 | Filters, NULL handling, sorting, `find_by_name`, SQL injection |
+| `test_chat_service.py` | 17 | Full request lifecycle, clarification, errors, rejection of unsupported numbers |
+| `test_knowledge_retriever.py` | 12 | Similarity, threshold, model and dimensions, ingestion and rollback |
+| `test_models.py` | 11 | Data models |
+| `test_response_builder.py` | 11 | Statuses and languages |
+| `test_answer_validator.py` | 9 | Numbers and normalization |
+| `test_database.py` | 8 | Schema constraints (foreign keys, dates, CHECK constraints) |
+| `test_embedding_service.py` | 8 | Error wrapping and BLOB conversion |
+| `test_product_comparator.py` | 7 | Differences and missing values |
+| `test_answer_generator.py` | 6 | Prompt, refusal, and errors |
+| `test_handlers.py` | 6 | The three handlers |
+| `test_promotion_repository.py` | 6 | Validity, dates, and boundaries |
+
+**Test types:**
+- **Unit tests:** The tests above run without Ollama or network access, using an in-memory SQLite database and fake clients.
+- **Real Ollama integration tests:** Not implemented yet.
+- **End-to-end tests:** `test_chat_service.py` exercises the full request flow, but uses fake Ollama-related components.
+
+---
+
+## Extending the Project: Adding a New Intent
+
+Example: adding `PROMOTION_SEARCH`.
+
+1. **Create a handler** in `handlers/`: a class with `handle(plan) -> EvidenceBundle` that obtains promotions from `PromotionRepository.find_valid`.
+2. **Register it** in `main.build_chat_service`: map `Intent.PROMOTION_SEARCH` to the new `PromotionHandler(...)`.
+3. **Format the result** in `ResponseBuilder`: add a branch to `build`, provide message templates in the three supported response languages, and pass promotions through `ChatResponse`.
+4. **Add tests** for the handler and response behavior.
+
+`ChatService` should not need to change.
+
+---
+
+## Known Limitations
+
+- Question understanding (intent and filter extraction) works **only in English**. Arabic and French messages can be language-detected and receive clarification messages in the detected language, but their filters are not extracted.
+- Algerian Darija written in Latin characters is classified as English.
+- A concept comparison such as “OLED vs QLED” is interpreted as a product comparison and ends in `product_not_found`. Use a question such as “What is the difference between OLED and QLED?” instead.
+- The `laptop` and `tv` categories in `QueryAnalyzer` are defaults for test data and must be replaced or aligned with the real catalog categories.
+- “Laptop with 16 GB RAM” is interpreted as “at least 16 GB”; this assumption is documented in tests.
+- SQLite `COLLATE NOCASE` handles English/Latin case-insensitivity only, not Arabic or accented characters.
+- Price filters do not check currency; all current test data uses DZD.
+- `AnswerValidator` does not detect numbers written as words or non-numeric factual errors.
+- Knowledge chunks are loaded from the database for every question. This is suitable for hundreds of chunks; add caching if measurement shows it is needed.
+- A SQLite connection is not shared across multiple threads by default. This must be addressed when adding FastAPI.
+- Conversation history is not implemented yet; `session_id` is accepted but currently unused.
+
+## Roadmap — Phase 6 and Beyond
+
+1. Add real integration tests with Ollama and tune `MIN_SIMILARITY`.
+2. Implement `PromotionHandler` (the repository is ready).
+3. Add Arabic and French filter extraction, followed by Algerian Darija support.
+4. Implement `NeedsAnalyzer` and `ProductRanker` for recommendations with reasons grounded in real data.
+5. Add `ConversationManager` for follow-up questions and language continuity.
+6. Add FastAPI and `to_dict()` or equivalent response serialization for the website.
+7. Improve `find_by_name` with typo tolerance and include availability in comparisons.

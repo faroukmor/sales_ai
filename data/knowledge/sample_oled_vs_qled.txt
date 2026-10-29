@@ -1,0 +1,5 @@
+OLED and QLED are two different display technologies used in televisions.
+
+In an OLED panel every pixel produces its own light. A pixel can switch off completely, so OLED screens can show true black and very high contrast, with wide viewing angles. OLED panels can suffer from image retention if a static image is shown for a very long time.
+
+A QLED television is an LCD television with a quantum dot layer. It uses a separate LED backlight, so the whole screen is lit from behind. QLED screens can reach high brightness, which helps in bright rooms, but they cannot switch individual pixels off completely.
