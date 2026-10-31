@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sales-ai-v2"
+version = "0.1.0"
+description = "Foundation for an agentic e-commerce sales assistant"
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "alembic>=1.14,<2.0",
+    "fastapi>=0.115,<1.0",
+    "langchain-core>=0.3,<2.0",
+    "langchain-groq>=0.2,<2.0",
+    "langgraph>=0.2,<2.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.7,<3.0",
+    "sqlalchemy>=2.0,<3.0",
+    "uvicorn[standard]>=0.34,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1.0",
+    "pytest>=8.3,<9.0",
+    "ruff>=0.9,<1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not integration and not groq_integration'"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: requires a dedicated PostgreSQL test database",
+    "groq_integration: requires explicit live Groq configuration",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

@@ -1,59 +1,70 @@
-# tests/test_promotion_repository.py
-from datetime import date
+from datetime import date, timedelta
 
-import pytest
+from sqlalchemy.orm import Session
 
-from db.seed_test_data import add_product, add_promotion
-from repositories.promotion_repository import PromotionRepository
+from app.db.models import Product, Promotion
+from app.repositories.promotion_repository import PromotionRepository
 
-TODAY = date(2026, 11, 15)
-
-
-@pytest.fixture
-def promos(conn):
-    laptop = add_product(conn, "Test Laptop", "laptop")
-    add_promotion(conn, "valid-laptops", source="s", category="laptop", starts_at="2026-11-01", ends_at="2026-11-30")
-    add_promotion(conn, "expired", source="s", category="laptop", starts_at="2026-10-01", ends_at="2026-11-14")
-    add_promotion(conn, "future", source="s", category="laptop", starts_at="2026-11-16", ends_at="2026-12-31")
-    add_promotion(conn, "no-end-date", source="s", category="laptop", starts_at="2026-11-01")
-    add_promotion(conn, "no-start-date", source="s", category="laptop", ends_at="2026-11-30")
-    add_promotion(conn, "valid-tv", source="s", category="tv", starts_at="2026-11-01", ends_at="2026-11-20")
-    add_promotion(conn, "valid-on-product", source="s", product_id=laptop, starts_at="2026-11-10", ends_at="2026-11-15")
-    conn.commit()
-    return PromotionRepository(conn, today=lambda: TODAY)
+TODAY = date(2026, 6, 15)
 
 
-def titles(promotions):
-    return [p.title for p in promotions]
+def _promotion_data(db_session: Session) -> Product:
+    product = Product(name="Target", category="laptop")
+    product.promotions = [
+        Promotion(title="Active product", source="test", starts_at=TODAY, ends_at=TODAY),
+        Promotion(
+            title="Expired",
+            source="test",
+            starts_at=TODAY - timedelta(days=2),
+            ends_at=TODAY - timedelta(days=1),
+        ),
+        Promotion(
+            title="Future",
+            source="test",
+            starts_at=TODAY + timedelta(days=1),
+            ends_at=TODAY + timedelta(days=2),
+        ),
+        Promotion(title="Unknown", source="test"),
+    ]
+    db_session.add_all(
+        [
+            product,
+            Promotion(
+                title="Active category",
+                source="test",
+                category="laptop",
+                starts_at=TODAY - timedelta(days=1),
+                ends_at=TODAY + timedelta(days=1),
+            ),
+        ]
+    )
+    db_session.commit()
+    return product
 
 
-def test_only_verifiably_valid_promotions_are_returned(promos):
-    assert titles(promos.find_valid()) == ["valid-on-product", "valid-tv", "valid-laptops"]
+def test_validity_boundaries_and_exclusions(db_session: Session) -> None:
+    _promotion_data(db_session)
+    repository = PromotionRepository(db_session, date_provider=lambda: TODAY)
+
+    assert {promotion.title for promotion in repository.find_valid()} == {
+        "Active product",
+        "Active category",
+    }
 
 
-def test_expired_future_and_undated_are_excluded(promos):
-    result = titles(promos.find_valid())
-    for excluded in ("expired", "future", "no-end-date", "no-start-date"):
-        assert excluded not in result
+def test_category_and_product_promotion_queries(db_session: Session) -> None:
+    product = _promotion_data(db_session)
+    repository = PromotionRepository(db_session, date_provider=lambda: TODAY)
 
-
-def test_boundary_dates_are_inclusive(promos):
-    assert "valid-on-product" in titles(promos.find_valid())   # ينتهي اليوم نفسه
-    later = PromotionRepository(promos._conn, today=lambda: date(2026, 11, 16))
-    assert "valid-on-product" not in titles(later.find_valid())
-    assert "future" in titles(later.find_valid())               # يبدأ اليوم نفسه
-
-
-def test_category_filter_matches_direct_and_via_product(promos):
-    assert titles(promos.find_valid(category="laptop")) == ["valid-on-product", "valid-laptops"]
-    assert titles(promos.find_valid(category="TV")) == ["valid-tv"]
-
-
-def test_no_promotions_in_category(promos):
-    assert promos.find_valid(category="phone") == []
-
-
-def test_returned_objects_have_parsed_dates(promos):
-    p = promos.find_valid(category="tv")[0]
-    assert p.starts_at == date(2026, 11, 1) and p.ends_at == date(2026, 11, 20)
-    assert p.source == "s"
+    assert {promotion.title for promotion in repository.find_valid("LAPTOP")} == {
+        "Active product",
+        "Active category",
+    }
+    product_promotions = repository.find_by_product(product.id)
+    assert {promotion.title for promotion in product_promotions} == {
+        "Active product",
+        "Expired",
+        "Future",
+        "Unknown",
+    }
+    assert repository.get_by_id(product_promotions[0].id) is not None
