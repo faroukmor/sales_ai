@@ -2,7 +2,14 @@ from sqlalchemy import Select, exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import Product, ProductSpec
-from app.schemas.product_filters import ComparisonOperator, ProductFilters, SpecConstraint
+from app.schemas.product_filters import (
+    ComparisonOperator,
+    ProductFilters,
+    ProductSortBy,
+    SortDirection,
+    SpecConstraint,
+    TextSpecConstraint,
+)
 
 
 class ProductRepository:
@@ -27,14 +34,28 @@ class ProductRepository:
             statement = statement.where(
                 Product.price.is_not(None), Product.price <= filters.max_price
             )
+        if filters.currency is not None:
+            statement = statement.where(func.upper(Product.currency) == filters.currency)
         if filters.in_stock_only:
             statement = statement.where(Product.in_stock.is_(True))
 
         for constraint in filters.spec_constraints:
             statement = statement.where(self._numeric_spec_exists(constraint))
+        for constraint in filters.text_spec_constraints:
+            statement = statement.where(self._text_spec_exists(constraint))
 
+        sort_column = {
+            ProductSortBy.PRICE: Product.price,
+            ProductSortBy.NAME: func.lower(Product.name),
+            ProductSortBy.BRAND: func.lower(Product.brand),
+        }[filters.sort_by]
+        ordered = (
+            sort_column.desc()
+            if filters.sort_direction is SortDirection.DESC
+            else sort_column.asc()
+        )
         statement = statement.order_by(
-            Product.price.is_(None), Product.price.asc(), Product.id.asc()
+            sort_column.is_(None), ordered, Product.id.asc()
         ).limit(limit)
         return list(self._session.scalars(statement).all())
 
@@ -113,6 +134,17 @@ class ProductRepository:
                 ProductSpec.key == constraint.key,
                 ProductSpec.value_num.is_not(None),
                 comparison,
+            )
+        )
+
+    @staticmethod
+    def _text_spec_exists(constraint: TextSpecConstraint):
+        return exists(
+            select(ProductSpec.id).where(
+                ProductSpec.product_id == Product.id,
+                ProductSpec.key == constraint.key,
+                ProductSpec.value_text.is_not(None),
+                func.lower(ProductSpec.value_text) == constraint.value.lower(),
             )
         )
 

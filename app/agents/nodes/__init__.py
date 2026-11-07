@@ -1,2 +1,1 @@
-"""Future LangGraph node package."""
-
+"""LangGraph orchestration nodes."""

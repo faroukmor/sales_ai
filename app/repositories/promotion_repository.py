@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -7,11 +7,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.db.models import Product, Promotion
 
 
+def utc_today() -> date:
+    return datetime.now(UTC).date()
+
+
 class PromotionRepository:
     def __init__(
         self,
         session: Session,
-        date_provider: Callable[[], date] = date.today,
+        date_provider: Callable[[], date] = utc_today,
     ) -> None:
         self._session = session
         self._date_provider = date_provider
@@ -32,6 +36,7 @@ class PromotionRepository:
         if category is not None:
             statement = statement.where(
                 or_(
+                    (Promotion.category.is_(None) & Promotion.product_id.is_(None)),
                     func.lower(Promotion.category) == category.lower(),
                     func.lower(Product.category) == category.lower(),
                 )

@@ -14,6 +14,9 @@ class Intent(StrEnum):
     RECOMMENDATION = "recommendation"
     PROMOTION_SEARCH = "promotion_search"
     GREETING = "greeting"
+    FAREWELL = "farewell"
+    GRATITUDE = "gratitude"
+    HELP = "help"
     UNKNOWN = "unknown"
 
 

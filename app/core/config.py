@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     groq_allow_powerful_fallback: bool = True
     intent_api_enabled: bool = True
     intent_validation_debug: bool = False
+    chat_max_history_messages: int = Field(default=30, ge=4, le=100)
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    session_cookie_secure: bool = False
+    session_days: int = Field(default=14, ge=1, le=90)
 
     postgres_host: str = "127.0.0.1"
     postgres_port: int = Field(default=55432, ge=1, le=65535)
@@ -64,6 +68,14 @@ class Settings(BaseSettings):
             port=self.postgres_port,
             database=self.postgres_db,
         )
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def checkpoint_database_uri(self) -> str:
+        return self.database_url.render_as_string(hide_password=False)
 
 
 @lru_cache

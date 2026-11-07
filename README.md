@@ -1,27 +1,41 @@
-# Sales AI 2.0
+# Sales AI 2.0 — GEANT Chat UI
 
 ## Overview
 
-Sales AI 2.0 is an independent reconstruction of an AI-powered e-commerce sales
-assistant. It currently includes the Phase 1 foundation and the Phase 2 PostgreSQL product
-catalog: typed product specifications, promotion validity, safe repository filters,
-repeatable fictional seed data, Alembic migrations, and isolated tests. Phase 3 adds
-multilingual intent understanding with deterministic routing between two GPT-OSS models.
+Sales AI 2.0 is a multilingual, database-grounded e-commerce assistant. GEANT Chat UI is its
+React interface for product search, factual comparison, deterministic recommendations, and
+active promotion lookup. Seeded products and promotions are fictional demonstration data,
+not verified Géant inventory or commercial offers.
 
 ## Architecture
 
 - **FastAPI** provides the HTTP boundary and dependency-injection framework.
-- **LangGraph** will orchestrate validated query plans in Phase 4; no graph exists yet.
+- **LangGraph** runs the checkpointed conversation and deterministic sales-function graph.
 - **Groq API** serves independently configured GPT-OSS 20B and 120B clients on demand.
 - **SQLAlchemy 2.x** provides synchronous persistence and request-scoped sessions.
 - **PostgreSQL 17** runs locally in Docker and holds transactional product data.
 - **RAG** will provide grounded retrieval in a future phase; no ingestion or vector search
   is implemented yet.
+- **React + Vite** provide the responsive GEANT Chat UI.
 
 ## Technology stack
 
 Python 3.12, FastAPI, Pydantic Settings, SQLAlchemy 2.x, Psycopg 3, Alembic,
-PostgreSQL 17, Docker Compose, LangGraph, LangChain Core, LangChain Groq, Pytest, and Ruff.
+PostgreSQL 17, Docker Compose, LangGraph, LangChain Core, LangChain Groq, React, Vite,
+Vitest, Pytest, and Ruff.
+
+## GEANT Chat UI architecture
+
+`POST /api/chat` validates a message, restores its LangGraph `thread_id`, runs P3 multilingual
+intent extraction, routes into P6 business functions, validates source references, composes a
+grounded multilingual response, and checkpoints the resulting state in PostgreSQL. The JSON
+response keeps products, comparison rows, rankings, promotions, and sources separate from
+prose so the UI never parses generated text for commercial facts.
+
+Supported intents are `product_search`, `comparison`, `recommendation`, and
+`promotion_search`. English, French, Arabic, Algerian Darija, and mixed-language input use the
+P3 understanding pipeline. Technical explanation requests return `insufficient_evidence`
+because document RAG is not implemented.
 
 ## Installation
 
@@ -59,6 +73,8 @@ GROQ_REASONING_EFFORT_FAST=low
 GROQ_REASONING_EFFORT_POWERFUL=medium
 GROQ_ALLOW_POWERFUL_FALLBACK=true
 INTENT_API_ENABLED=true
+CHAT_MAX_HISTORY_MESSAGES=30
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
 Clients are created lazily on the first intent request. Importing or starting the FastAPI
@@ -181,15 +197,38 @@ development to emit these sanitized fields; raw customer messages and rejected v
 not logged. Non-recoverable errors such as negative prices do not trigger a larger-model
 call.
 
-## Running the API
+## Running locally
 
 With `.env` configured:
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 OpenAPI documentation is available at `http://127.0.0.1:8000/docs`.
+
+In a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Vite proxies `/api` and `/health` to FastAPI. Set
+`VITE_API_BASE_URL` only when the API is hosted on a different origin. Never expose the Groq
+key through a `VITE_` variable.
+
+For the complete container stack:
+
+```bash
+docker compose up --build
+alembic upgrade head
+python -m app.db.seed
+```
+
+The UI is then available on port 5173 and FastAPI on port 8000. Migration and seed commands
+must run against the configured database before catalog chat requests.
 
 ## API endpoints
 
@@ -198,6 +237,7 @@ OpenAPI documentation is available at `http://127.0.0.1:8000/docs`.
   database is unavailable.
 - `POST /api/intent/parse` validates a multilingual message and returns its query plan,
   selected model, latency, and token metadata. It does not access the product repository.
+- `POST /api/chat` executes a checkpointed, database-grounded conversation turn.
 
 Example:
 
@@ -207,6 +247,19 @@ curl -X POST http://127.0.0.1:8000/api/intent/parse \
   -d '{"message":"I need a laptop under 100000 DZD with 16GB RAM"}'
 ```
 
+Chat example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Je cherche un PC avec 16 Go de RAM","session_id":null}'
+```
+
+Reuse the returned opaque UUID4 `session_id` for follow-up turns. It is stored in browser
+session storage by the UI. Without authentication, possession of a session ID grants access
+to that conversation thread; it is not proof of identity and should not be used for sensitive
+or user-specific data.
+
 ## Testing
 
 Unit tests need no Docker, database, internet connection, or Groq key:
@@ -214,6 +267,7 @@ Unit tests need no Docker, database, internet connection, or Groq key:
 ```bash
 pytest -q
 ruff check .
+cd frontend && npm test && npm run build
 ```
 
 PostgreSQL integration tests require an explicitly configured, disposable database whose
@@ -261,8 +315,8 @@ claimed without executing the live evaluation.
 app/api/           HTTP routing modules
 app/core/          validated settings and JSON logging
 app/db/            SQLAlchemy engine, models, sessions, and repeatable seed data
-app/agents/        future LangGraph orchestration
-app/tools/         future agent-callable tools
+app/agents/        LangGraph state, P6 business graph, and P7 conversational graph
+app/tools/         deterministic product, comparison, and promotion tools
 app/services/      intent parser, routing, validation, and Groq client boundary
 app/repositories/  product and promotion persistence adapters
 app/schemas/       typed catalog filters and read contracts
@@ -270,6 +324,7 @@ app/rag/           future retrieval infrastructure
 alembic/           database migration environment
 data/              local development assets and labeled intent evaluation cases
 tests/             isolated unit tests
+frontend/          GEANT Chat UI React/Vite application
 ```
 
 ## Planned features and roadmap
@@ -278,9 +333,13 @@ tests/             isolated unit tests
 - **Phase 2 — Database models, repositories, promotions, seed data, and migrations:**
   implemented.
 - **Phase 3 — Dual GPT-OSS multilingual intent understanding:** implemented.
-- Later phases: LangGraph orchestration, controlled product tools, RAG, and conversations.
+- Phase 4: typed LangGraph state.
+- Phase 6: controlled product tools and deterministic recommendations.
+- Phase 7: checkpointed chat API and GEANT Chat UI.
+- Future: authentication, rate limiting, and document RAG.
 
-Phase 4 will consume only validated `QueryPlan` objects as LangGraph state, route them to
-controlled repository-backed tools, and preserve model metadata for observability. No
-LangGraph execution graph, RAG pipeline, authentication, frontend, or CI/CD workflow is
-included in Phase 3.
+Known limitations: there is no document RAG, authentication, per-user authorization, SSE
+streaming, or server-side conversation list. Browser storage retains only the opaque session
+identifier, not a permanent local transcript. The PostgreSQL LangGraph checkpointer creates
+its own checkpoint tables during the first chat request; the catalog schema remains managed
+by Alembic.

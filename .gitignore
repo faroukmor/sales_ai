@@ -23,6 +23,7 @@ coverage.xml
 # Builds and local data
 build/
 dist/
+node_modules/
 *.sqlite
 *.sqlite3
 *.db
@@ -35,4 +36,3 @@ logs/
 *.swp
 .DS_Store
 Thumbs.db
-

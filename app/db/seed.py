@@ -164,6 +164,40 @@ PRODUCTS: tuple[dict[str, Any], ...] = (
     },
 )
 
+# Original, clearly fictional storefront inventory. Specifications are illustrative demo data.
+_STORE_CATEGORIES = (
+    ("washing-machine", "Lavage", ("AquaWash", "Sirocco"), 62000),
+    ("refrigerator", "Froid", ("NordCool", "Atlas Home"), 78000),
+    ("air-conditioner", "Climatisation", ("Breeze", "Sahara Air"), 69000),
+    ("television", "Multimédia", ("Lumina", "Vista"), 52000),
+    ("cooking", "Cuisson", ("Chefline", "Flamme"), 34000),
+    ("heating", "Chauffage", ("Therma", "Warmia"), 18000),
+    ("small-appliance", "Petit électroménager", ("KitchenJoy", "DailyMix"), 7500),
+    ("laptop", "Informatique", ("Northstar", "Atlas Computing"), 89000),
+)
+
+STOREFRONT_PRODUCTS: tuple[dict[str, Any], ...] = tuple(
+    {
+        "name": f"DEMO-{slug.upper()}-{number:02d}",
+        "category": label,
+        "brand": brands[number % 2],
+        "price": Decimal(base + number * (base // 12)),
+        "in_stock": number != 5,
+        "stock_quantity": 0 if number == 5 else 4 + number * 2,
+        "description": (
+            f"Produit de démonstration {label.lower()}; caractéristiques et prix "
+            "illustratifs uniquement."
+        ),
+        "image_url": None,
+        "specs": {
+            "demo_reference": f"{slug[:3].upper()}-{number:03d}",
+            "data_notice": "Illustrative demo specification",
+        },
+    }
+    for slug, label, brands, base in _STORE_CATEGORIES
+    for number in range(1, 7)
+)
+
 
 def seed_database(
     session: Session,
@@ -242,6 +276,19 @@ def seed_database(
     return SeedReport(**counters)
 
 
+def seed_storefront(session: Session) -> SeedReport:
+    counters = {name: 0 for name in SeedReport.__dataclass_fields__}
+    names = [item["name"] for item in STOREFRONT_PRODUCTS]
+    with session.begin():
+        existing = {
+            p.name: p for p in session.scalars(select(Product).where(Product.name.in_(names)))
+        }
+        for item in STOREFRONT_PRODUCTS:
+            _product, outcome = _seed_product(session, existing.get(item["name"]), item)
+            counters[f"products_{outcome}"] += 1
+    return SeedReport(**counters)
+
+
 def _seed_product(
     session: Session,
     product: Product | None,
@@ -256,12 +303,16 @@ def _seed_product(
         session.add(product)
 
     changed = created
-    for field in ("category", "brand", "price", "in_stock"):
+    for field in ("category", "brand", "price", "in_stock", "stock_quantity", "image_url"):
+        if field not in item:
+            continue
         if getattr(product, field) != item[field]:
             setattr(product, field, item[field])
             changed = True
     defaults = {
-        "description": "Fictional product created solely for Sales AI development tests.",
+        "description": item.get(
+            "description", "Fictional product created solely for Sales AI development tests."
+        ),
         "currency": "DZD",
         "url": None,
         "is_test_data": True,
@@ -317,12 +368,19 @@ def _seed_promotion(
 def main() -> None:
     with SessionLocal() as session:
         report = seed_database(session)
+        storefront_report = seed_storefront(session)
     print(
         "Seed complete: "
         f"products(created={report.products_created}, updated={report.products_updated}, "
         f"skipped={report.products_skipped}); "
         f"promotions(created={report.promotions_created}, "
         f"updated={report.promotions_updated}, skipped={report.promotions_skipped})"
+    )
+    print(
+        "Storefront seed complete: "
+        f"products(created={storefront_report.products_created}, "
+        f"updated={storefront_report.products_updated}, "
+        f"skipped={storefront_report.products_skipped})"
     )
 
 
