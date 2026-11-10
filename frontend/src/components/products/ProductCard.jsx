@@ -8,20 +8,20 @@ const specValue = (spec) => {
 export default function ProductCard({ product }) {
   const specs = Object.fromEntries((product.specs || []).map((item) => [item.key, specValue(item)]))
   const demo = product.name.startsWith('TEST-')
-  return <article className="product-card" data-testid="product-card">
+  return <article className="chat-product-card" data-testid="product-card">
     <div className="card-topline">
       <span className="category-chip">{product.category}</span>
       {demo && <span className="demo-chip">Demo product</span>}
     </div>
     <h3>{product.name}</h3>
-    <p className="muted">{product.brand || 'Brand unavailable'}</p>
+    <p className="chat-muted">{product.brand || 'Brand unavailable'}</p>
     <strong className="price">{product.price == null ? 'Price unavailable' : `${product.price} ${product.currency}`}</strong>
     <div className="spec-list">
       {specs.ram_gb && <span><Microchip size={15} /> RAM {specs.ram_gb}</span>}
       {specs.storage_gb && <span><HardDrive size={15} /> Storage {specs.storage_gb}</span>}
       {specs.processor && <span><Microchip size={15} /> {specs.processor}</span>}
     </div>
-    <div className={`stock stock-${product.in_stock}`}>
+    <div className={`chat-stock chat-stock-${product.in_stock}`}>
       {product.in_stock === true ? <><PackageCheck size={16} /> In stock</> :
         product.in_stock === false ? <><PackageX size={16} /> Out of stock</> : <>Availability unknown</>}
     </div>
