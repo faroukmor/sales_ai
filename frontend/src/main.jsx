@@ -5,6 +5,7 @@ import AppErrorBoundary from './components/common/AppErrorBoundary'
 import './styles/globals.css'
 import './styles/chat.css'
 import './styles/store.css'
+import './styles/admin.css'
 const rootElement = document.getElementById('root')
 
 if (!rootElement) {

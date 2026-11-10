@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.admin import router as admin_router
 from app.api.routes.intent import router as intent_router
 from app.api.routes.storefront import router as storefront_router
 from app.core.config import get_settings
@@ -29,6 +30,7 @@ app.include_router(intent_router)
 app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(storefront_router)
+app.include_router(admin_router)
 
 
 class HealthResponse(BaseModel):

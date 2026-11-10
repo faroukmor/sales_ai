@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     session_cookie_secure: bool = False
     session_days: int = Field(default=14, ge=1, le=90)
+    admin_email: str = ""
 
     postgres_host: str = "127.0.0.1"
     postgres_port: int = Field(default=55432, ge=1, le=65535)
