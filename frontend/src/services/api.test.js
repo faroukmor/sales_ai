@@ -37,6 +37,11 @@ describe('storeApi error messages', () => {
     await expect(storeApi.login({})).rejects.toThrow('Field required')
   })
 
+  it('removes the technical "Value error," prefix', async () => {
+    mockFetch({ ok: false, status: 422, json: async () => ({ detail: [{ msg: 'Value error, URL must start with http:// or https://' }] }) })
+    await expect(storeApi.login({})).rejects.toThrow(/^URL must start with/)
+  })
+
   it('reports server errors with the HTTP status', async () => {
     mockFetch({ ok: false, status: 500, json: async () => { throw new Error('not json') } })
     await expect(storeApi.me()).rejects.toThrow(/HTTP 500/)

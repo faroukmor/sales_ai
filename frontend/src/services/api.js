@@ -4,7 +4,7 @@ function errorMessage(status, payload) {
   const detail = payload?.detail
   if (typeof detail === 'string' && detail) return detail
   if (Array.isArray(detail) && detail.length) {
-    return detail.map((item) => item?.msg || String(item)).join(' · ')
+    return detail.map((item) => (item?.msg ? item.msg.replace(/^Value error, /, '') : String(item))).join(' · ')
   }
   if (status >= 500) return `Server error (HTTP ${status}). Check the API logs: docker compose logs api`
   return `Request failed (HTTP ${status}).`
@@ -54,6 +54,7 @@ export const storeApi = {
   checkout(data) { return write('/api/orders/demo', { method: 'POST', body: JSON.stringify(data) }) },
   orders() { return request('/api/orders/me') },
   adminMe() { return request('/api/admin/me') },
+  adminSchema() { return request('/api/admin/catalog-schema') },
   adminProducts(params = {}) { return request(`/api/admin/products?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null))}`) },
   createAdminProduct(data) { return write('/api/admin/products', { method: 'POST', body: JSON.stringify(data) }) },
   updateAdminProduct(id, data) { return write(`/api/admin/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) }) },

@@ -10,6 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.auth import current_user, require_csrf
+from app.core.catalog_schema import spec_label, type_label, types_for_group
 from app.db.database import get_db
 from app.db.models import Cart, CartItem, Order, OrderItem, Product, Promotion, User, UserSession
 
@@ -21,6 +22,7 @@ def product_json(p: Product) -> dict:
         "id": p.id,
         "name": p.name,
         "category": p.category,
+        "category_label": type_label(p.category),
         "brand": p.brand,
         "description": p.description,
         "price": p.price,
@@ -30,7 +32,13 @@ def product_json(p: Product) -> dict:
         "image_url": p.image_url,
         "is_test_data": p.is_test_data,
         "specs": [
-            {"key": s.key, "value_text": s.value_text, "value_num": s.value_num, "unit": s.unit}
+            {
+                "key": s.key,
+                "label": spec_label(s.key),
+                "value_text": s.value_text,
+                "value_num": s.value_num,
+                "unit": s.unit,
+            }
             for s in p.specs
         ],
     }
@@ -61,7 +69,13 @@ def products(
             )
         )
     if category:
-        clauses.append(func.lower(Product.category) == category.lower())
+        group_types = types_for_group(category)
+        if group_types:  # a store group such as "Lavage"
+            clauses.append(
+                func.lower(Product.category).in_((*group_types, category.strip().lower()))
+            )
+        else:
+            clauses.append(func.lower(Product.category) == category.lower())
     if brand:
         clauses.append(func.lower(Product.brand) == brand.lower())
     if min_price is not None:
@@ -110,7 +124,7 @@ def product_detail(product_id: int, db: Annotated[Session, Depends(get_db)]):
 @router.get("/categories")
 def categories(db: Annotated[Session, Depends(get_db)]):
     return [
-        {"name": name, "count": count}
+        {"name": name, "label": type_label(name), "count": count}
         for name, count in db.execute(
             select(Product.category, func.count(Product.id))
             .group_by(Product.category)

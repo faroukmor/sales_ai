@@ -52,6 +52,19 @@ class UserRead(BaseModel):
     id: int
     full_name: str
     email: str
+    is_admin: bool = False
+
+
+def is_admin_user(user: User) -> bool:
+    """True only for the single account whose email equals ADMIN_EMAIL."""
+    configured = get_settings().admin_email.strip().lower()
+    return bool(configured) and user.email.strip().lower() == configured
+
+
+def user_read(user: User) -> UserRead:
+    return UserRead(
+        id=user.id, full_name=user.full_name, email=user.email, is_admin=is_admin_user(user)
+    )
 
 
 def _hash_token(token: str) -> str:
@@ -134,7 +147,7 @@ def register(body: RegisterRequest, response: Response, db: Annotated[Session, D
             status_code=409, detail="An account with this email already exists"
         ) from None
     return {
-        "user": UserRead(id=user.id, full_name=user.full_name, email=user.email),
+        "user": user_read(user),
         "csrf_token": csrf,
     }
 
@@ -165,7 +178,7 @@ def login(
     csrf = _set_session(response, db, user)
     db.commit()
     return {
-        "user": UserRead(id=user.id, full_name=user.full_name, email=user.email),
+        "user": user_read(user),
         "csrf_token": csrf,
     }
 
@@ -174,7 +187,7 @@ def login(
 def me(session: Annotated[UserSession, Depends(current_session)]):
     user = session.user
     return {
-        "user": UserRead(id=user.id, full_name=user.full_name, email=user.email),
+        "user": user_read(user),
         "csrf_token": session.csrf_token,
     }
 

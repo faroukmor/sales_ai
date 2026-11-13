@@ -1,4 +1,4 @@
-import { Bot, Menu, Search, ShoppingCart, UserRound, X } from 'lucide-react'
+import { Bot, LayoutDashboard, Menu, Search, ShoppingCart, UserRound, X } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
@@ -15,7 +15,7 @@ export default function StoreLayout() {
       <Link className="brand" to="/"><span>GÉANT</span><small>STORE — DEMO</small></Link>
       <form className="header-search" onSubmit={search}><Search size={18}/><input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Rechercher des produits" placeholder="Rechercher dans le catalogue…"/></form>
       <nav className={mobile ? 'header-actions open' : 'header-actions'}>
-        <NavLink to="/catalog">Produits</NavLink><button className="link-button" onClick={() => setChat(true)}><Bot size={19}/> Assistant IA</button>
+        <NavLink to="/catalog">Produits</NavLink>{user?.is_admin && <NavLink to="/admin"><LayoutDashboard size={19}/>Administration</NavLink>}<button className="link-button" onClick={() => setChat(true)}><Bot size={19}/> Assistant IA</button>
         <NavLink to={user ? '/profile' : '/login'}><UserRound size={19}/>{user ? user.full_name.split(' ')[0] : 'Connexion'}</NavLink>
         <NavLink className="cart-link" to="/cart"><ShoppingCart size={20}/>Panier <b>{cart.item_count}</b></NavLink>
         {user && <button className="link-button" onClick={() => logout().then(() => navigate('/'))}>Déconnexion</button>}
